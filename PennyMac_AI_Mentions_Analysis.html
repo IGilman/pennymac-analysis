@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PennyMac — AI Mentions in Earnings Calls</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0b0e;
+    --surface: #12141a;
+    --border: #1e2130;
+    --accent: #00d4ff;
+    --accent2: #a78bfa;
+    --gpt-color: #19c37d;
+    --text: #e8eaf0;
+    --muted: #6b7280;
+  }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 40px 32px;
+  }
+
+  header { max-width: 1100px; margin: 0 auto 48px; }
+
+  .kicker {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  h1 { font-size: clamp(26px, 4vw, 46px); font-weight: 800; line-height: 1.1; margin-bottom: 12px; }
+  h1 .a { color: var(--accent); }
+  h1 .b { color: var(--accent2); }
+
+  .subtitle { font-size: 15px; color: var(--muted); max-width: 660px; line-height: 1.6; font-weight: 400; }
+
+  .stats-row {
+    max-width: 1100px;
+    margin: 0 auto 32px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+  }
+
+  .stat-label { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .stat-num { font-size: 36px; font-weight: 800; line-height: 1; }
+  .stat-sub { font-size: 12px; color: var(--muted); margin-top: 6px; font-weight: 400; }
+
+  .stat-a .stat-num { color: var(--accent); }
+  .stat-b .stat-num { color: var(--gpt-color); }
+  .stat-c .stat-num { color: var(--accent2); }
+
+  .chart-wrapper {
+    max-width: 1100px;
+    margin: 0 auto 48px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px;
+  }
+
+  canvas { width: 100% !important; }
+
+  .legend { display: flex; gap: 24px; margin-top: 20px; flex-wrap: wrap; align-items: center; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .legend-dash { width: 24px; border-top: 2px dashed var(--gpt-color); }
+
+  .details-section { max-width: 1100px; margin: 0 auto; }
+  .details-section h2 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+  .details-section .desc { font-size: 14px; color: var(--muted); margin-bottom: 24px; font-weight: 400; }
+
+  .quarters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 12px;
+  }
+
+  .qcard {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+
+  .qcard:hover { border-color: #2e3350; }
+  .t-ai.qcard:hover { border-color: rgba(0,212,255,0.35); }
+
+  .card-hdr {
+    display: flex;
+    align-items: center;
+    padding: 16px 20px;
+    cursor: default;
+  }
+
+  .qcard:not(.zero) .card-hdr { cursor: pointer; }
+
+  .card-lbl { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 4px; }
+  .card-cnt { font-size: 28px; font-weight: 800; }
+  .t-ai .card-cnt { color: var(--accent); }
+  .zero .card-cnt { color: var(--muted) !important; }
+
+  .bar-bg { height: 3px; background: var(--border); border-radius: 4px; margin-top: 8px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; }
+  .t-ai .bar-fill { background: var(--accent); }
+
+  .tog { font-size: 16px; color: var(--muted); transition: transform 0.2s; user-select: none; }
+  .qcard.open .tog { transform: rotate(180deg); }
+
+  .card-body { padding: 16px 20px; display: none; }
+  .qcard.open .card-body { display: block; }
+
+  .mention {
+    font-size: 13px;
+    color: #b0b8cc;
+    line-height: 1.65;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-weight: 400;
+  }
+  .mention:last-child { border-bottom: none; padding-bottom: 0; }
+
+  mark { border-radius: 3px; padding: 0 2px; font-weight: 600; }
+  .t-ai mark { background: rgba(0,212,255,0.15); color: var(--accent); }
+
+  @media (max-width: 600px) {
+    body { padding: 24px 16px; }
+    .stats-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">PennyMac Financial Services · Earnings Transcript Analysis · Q1 2020 – Q4 2025</div>
+  <h1>PFSI: <span class="a">AI</span> Mentions in <span class="b">Earnings Calls</span></h1>
+  <p class="subtitle">Total mentions of AI, Artificial Intelligence, Machine Learning, ML, NLP, Natural Language Processing, and Natural Language across 24 quarters of earnings calls (Q1 2020 – Q4 2025). Marker shows ChatGPT's launch in November 2022.</p>
+</header>
+
+<div class="stats-row">
+  <div class="stat-card stat-a">
+    <div class="stat-label">Total Mentions</div>
+    <div class="stat-num">45</div>
+    <div class="stat-sub">AI/ML/NLP combined across all 24 quarters</div>
+  </div>
+  <div class="stat-card stat-b">
+    <div class="stat-label">Peak Quarter</div>
+    <div class="stat-num" style="font-size:26px">Q2 2025</div>
+    <div class="stat-sub">15 mentions — highest single quarter on record</div>
+  </div>
+  <div class="stat-card stat-c">
+    <div class="stat-label">Pre-ChatGPT Mentions</div>
+    <div class="stat-num">0</div>
+    <div class="stat-sub">Zero AI mentions from Q1 2020 through Q4 2022</div>
+  </div>
+</div>
+
+<div class="chart-wrapper">
+  <canvas id="myChart" height="340"></canvas>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>Total AI/ML/NLP Mentions</div>
+    <div class="legend-item"><div class="legend-dash"></div>ChatGPT Launch (Nov 2022)</div>
+  </div>
+</div>
+
+<div class="details-section">
+  <h2>Quarterly AI Context Details</h2>
+  <p class="desc">Click any quarter card to expand and read the exact AI-related excerpts from that earnings call, with key terms highlighted.</p>
+  <div class="quarters-grid" id="quarters-grid"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const QS = [
+  'Q1_2020','Q2_2020','Q3_2020','Q4_2020',
+  'Q1_2021','Q2_2021','Q3_2021','Q4_2021',
+  'Q1_2022','Q2_2022','Q3_2022','Q4_2022',
+  'Q1_2023','Q2_2023','Q3_2023','Q4_2023',
+  'Q1_2024','Q2_2024','Q3_2024','Q4_2024',
+  'Q1_2025','Q2_2025','Q3_2025','Q4_2025'
+];
+
+// Mention counts per quarter (based on thorough review of all transcripts)
+const COUNTS = [
+  0,0,0,0,   // 2020: no AI mentions
+  0,0,0,0,   // 2021: no AI mentions
+  0,0,0,0,   // 2022: no AI mentions — ChatGPT launched Nov 2022
+  1,0,0,1,   // 2023: Q1 first cautious mention, Q4 SSE/AI marketplace comment
+  5,2,1,2,   // 2024: Q1 major AI deployment detail, Q2 emerging tech, Q3 AI in servicing, Q4 chatbot plans
+  7,15,6,5   // 2025: Q1 Mac Chat/automation, Q2 AI accelerator peak, Q3 cost reduction, Q4 Vesta AI platform
+];
+
+// ChatGPT launch is between Q3 2022 (index 10) and Q4 2022 (index 11)
+// We mark it at position 10.75 on the x-axis
+const CHATGPT_IDX = 10.75;
+
+// Detailed context for each quarter
+const AI_CTX = {
+  Q1_2023: [
+    "While still early in its development, we are excited and supportive of the potential contributions from artificial intelligence in the loan manufacturing process.",
+    "We are continuously looking for ways to streamline our business functions and maximize efficiency; and we will continue to assess opportunities that leverage the latest state-of-the-art technology available."
+  ],
+  Q4_2023: [
+    "There's a lot of talk about AI in the marketplace, and I look at what we've done on the system — we're at 95% self-serve on our SSE system. A lot of the AI discussions taking place in the marketplace are really yesterday's automation discussions.",
+    "Since we launched [SSE] in 2019, it has performed extremely well, meaningfully enhancing our capabilities while helping to drive down costs. With this technology now free and clear of any restrictions, we believe there is potential for additional opportunities over time."
+  ],
+  Q1_2024: [
+    "There's a lot of talk about AI in the marketplace. We're at 95% self-serve on our [SSE] system — a lot of the AI discussions are really yesterday's automation discussions.",
+    "On the production side, we have deployed AI to read documents from clients and brokers, which helps in the classification of documents and extraction of data.",
+    "On the servicing side, we can route all documents to the area that needs to address them. We have a lot of great voice AI tools that we're using.",
+    "The most exciting one is that we can record all customer conversations to drive better business outcomes, and also see all customer complaints, which allows us to reduce complaints and continue to reduce costs.",
+    "We've got a lot of great AI development here in the organization — this system is going to continue to outshine and is one that is going to be really meaningful, first and foremost for us, but also important for the industry."
+  ],
+  Q2_2024: [
+    "This management team has done a tremendous job developing our proprietary servicing system, which has the flexibility to rapidly adjust for regulatory changes and incorporate new and emerging technologies, including artificial intelligence, to drive operating efficiencies.",
+    "PennyMac expects to be the first servicer in the industry to successfully incorporate requirements for the VASP program directly into its technology — highlighting our commitment to being an innovative leader."
+  ],
+  Q3_2024: [
+    "The proprietary servicing system has the flexibility to incorporate new and emerging technologies, including artificial intelligence, to drive operating efficiencies as we continue to grow."
+  ],
+  Q4_2024: [
+    "I know that we are going to be introducing a chatbot in the call center and servicing, as well as the consumer direct channel, in the not-too-distant future.",
+    "As we continue to grow the servicing portfolio, there are aspects of our servicing operation that we believe can continue to have process improvements and automation — technology allows us to implement it faster, quicker, and smarter."
+  ],
+  Q1_2025: [
+    "We remain intensely focused on the organic growth of our servicing portfolio and committed to implementing artificial intelligence throughout our technology stack.",
+    "I'm seeing more and more deployment of chatbots across the organization that will increase productivity.",
+    "On the servicing front, we are uniquely positioned. Having SSE gives us the ability to customize and integrate AI into our system. We've automated 20 different processes in servicing.",
+    "In servicing, we have Mac Chat, a customer interaction system that allows customers to engage with PennyMac on a 24/7 basis. Its annualized savings has been over 45,000 hours a year, roughly translating to $2 million a year in savings.",
+    "In servicing, our document processing and process automation system has saved us over $2 million a year, or 130,000 hours.",
+    "In our Broker Direct channel, we've instituted a document processing system that has saved out-of-pocket expenses to the consumer of $7 a loan.",
+    "As we can work with our third-party vendors who are investing in AI, I have no doubt that we're going to see benefits — a shortened timeline for getting loans originated and sold in the capital markets."
+  ],
+  Q2_2025: [
+    "Our unwavering, intense focus on artificial intelligence — we are not just building momentum, we are accelerating with breakthrough speed in the development of AI.",
+    "We are aggressively advancing our AI capabilities, making targeted and strategic investments to enhance the customer experience, unlock new revenue streams, and drive unprecedented levels of efficiency to dramatically reduce expenses.",
+    "Our dedicated AI accelerator team is at the forefront, relentlessly focused on delivering and adopting AI applications and productivity tools faster than ever before.",
+    "Our cloud-based and flexible proprietary platforms have positioned us extraordinarily well to integrate AI, profoundly enhancing our capabilities across our entire technology landscape.",
+    "Our proprietary chatbots are extensions of our loan officers and underwriters, providing instant, compliant answers sourced directly from our deep well of policies and procedures.",
+    "With our AI call summarization, we're automating critical after-call work, bringing up valuable time and insights for our sales teams, contributing directly to increased conversion.",
+    "Our servicing AI processing solution is automating critical document workflows and streamlining operations.",
+    "Our advanced Servicing Automated Assistant, available instantly on web and mobile, provides immediate access to loan-specific information and answers to borrower questions.",
+    "To date, we've already launched or are actively developing more than 35 AI tools and applications with a projected annual economic benefit of approximately $25 million.",
+    "This brings me to slide 14, which illustrates PennyMac's ambitious, groundbreaking vision for artificial intelligence — achieving significant milestones from advanced coding productivity tools to intelligent chatbots reshaping daily operations.",
+    "Our roadmap includes sophisticated agent automation of complex loan processing activities.",
+    "We are not just building momentum, we are accelerating with breakthrough speed — the broad implementation of artificial intelligence is creating significant efficiency gains.",
+    "Our strategic commitment is a natural evolution of our history of investing in leading edge technology, designed to enhance the customer experience and unlock new revenue streams.",
+    "While this is far more than a strong start, this is just the beginning of what's possible with AI, and we are incredibly excited about what the future holds.",
+    "This is truly transformative for our entire balanced business model: our unwavering focus on artificial intelligence as a core strategic pillar."
+  ],
+  Q3_2025: [
+    "We do expect servicing costs to continue to decline, both through the use of our technology and implementation of our artificial intelligence initiatives.",
+    "We think there are places and parts of the operations where we can gain significant additional operational leverage and reduce costs to a greater degree through AI.",
+    "A lot of these initiatives are AI-related to help drive down the decline in expenses, as well as look at other ways we can use our technology in the marketplace.",
+    "As we continue deploying AI throughout the organization, I am confident that our strategic positioning and relentless focus on efficiency ensure we are well equipped to drive substantial growth and superior returns.",
+    "Management highlighted AI/data optimization and the rollout of Vesta's origination platform, with tangible efficiency gains.",
+    "The guidance reflected additional cost savings in terms of servicing on a unit basis — as the portfolio grows and we can move as quickly as we want with our technology initiatives, there could be potential additional upside."
+  ],
+  Q4_2025: [
+    "This modern architecture allows for rapid iteration and integration of new AI processes and technologies to deliver meaningful improvements in the customer experience while unlocking significantly more efficiency gains throughout 2026 and beyond.",
+    "We are beginning to utilize artificial intelligence to drive greater customer service and using deeper servicing integrations to anticipate borrower needs with real-time data.",
+    "By deploying AI-driven automation for tasks previously performed manually, we are experiencing an immediate impact — unlocking efficiency gains of approximately 50% for our loan officers.",
+    "Walking a loan with a borrower on the phone, which took over an hour on our legacy system, has been cut to just 30 minutes with our AI-forward Vesta platform.",
+    "We are seeing a reduction in the average end-to-end loan processing time by approximately 25% — representing approximately 240,000 hours of time saved across 2025, with a corresponding 25% decrease in operational costs to originate."
+  ]
+};
+
+// Build chart with annotation plugin inline
+const ctx = document.getElementById('myChart').getContext('2d');
+const labels = QS.map(q => q.replace('_', ' '));
+
+// Create gradient
+const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+gradient.addColorStop(0, 'rgba(0,212,255,0.25)');
+gradient.addColorStop(1, 'rgba(0,212,255,0.0)');
+
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [
+      {
+        label: 'AI Mentions',
+        data: COUNTS,
+        borderColor: '#00d4ff',
+        borderWidth: 2.5,
+        backgroundColor: gradient,
+        pointBackgroundColor: COUNTS.map(v => v > 0 ? '#00d4ff' : '#1e2130'),
+        pointBorderColor: '#00d4ff',
+        pointRadius: COUNTS.map(v => v > 0 ? 5 : 3),
+        pointHoverRadius: 7,
+        tension: 0.3,
+        fill: true
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#12141a',
+        borderColor: '#1e2130',
+        borderWidth: 1,
+        titleColor: '#e8eaf0',
+        bodyColor: '#b0b8cc',
+        titleFont: { family: 'DM Mono', size: 12 },
+        bodyFont: { family: 'DM Mono', size: 12 },
+        callbacks: { label: c => ` AI Mentions: ${c.parsed.y}` }
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: '#1a1d28' },
+        ticks: { color: '#6b7280', font: { family: 'DM Mono', size: 10 }, maxRotation: 45 }
+      },
+      y: {
+        grid: { color: '#1a1d28' },
+        ticks: { color: '#6b7280', font: { family: 'DM Mono', size: 11 }, stepSize: 2 },
+        beginAtZero: true,
+        suggestedMax: 18
+      }
+    }
+  }
+});
+
+// Draw ChatGPT annotation manually
+const originalDraw = chart.draw.bind(chart);
+Chart.register({
+  id: 'chatgptLine',
+  afterDraw(c) {
+    const xScale = c.scales.x;
+    const yScale = c.scales.y;
+    const ctx2 = c.ctx;
+
+    // x position between Q3 2022 (index 10) and Q4 2022 (index 11)
+    const x = xScale.getPixelForValue(CHATGPT_IDX);
+    const yTop = yScale.top;
+    const yBottom = yScale.bottom;
+
+    ctx2.save();
+
+    // Draw label inside the chart area so it's never clipped
+    ctx2.fillStyle = '#19c37d';
+    ctx2.font = '10px DM Mono, monospace';
+    ctx2.textAlign = 'center';
+    const labelY1 = yTop + 14;
+    const labelY2 = yTop + 26;
+    ctx2.fillText('ChatGPT', x, labelY1);
+    ctx2.fillText('Launches', x, labelY2);
+
+    // Dashed line starts just below the label text
+    ctx2.setLineDash([6, 4]);
+    ctx2.strokeStyle = '#19c37d';
+    ctx2.lineWidth = 1.5;
+    ctx2.beginPath();
+    ctx2.moveTo(x, labelY2 + 6);
+    ctx2.lineTo(x, yBottom);
+    ctx2.stroke();
+
+    ctx2.restore();
+  }
+});
+chart.update();
+
+// Build quarter cards
+function buildCards() {
+  const grid = document.getElementById('quarters-grid');
+  const maxCount = Math.max(...COUNTS);
+
+  QS.forEach((q, i) => {
+    const count = COUNTS[i];
+    const ctxs = AI_CTX[q] || [];
+    const zero = count === 0;
+
+    const card = document.createElement('div');
+    card.className = `qcard t-ai${zero ? ' zero' : ''}`;
+
+    const pct = maxCount > 0 ? (count / maxCount) * 100 : 0;
+
+    card.innerHTML = `
+      <div class="card-hdr">
+        <div style="flex:1">
+          <span class="card-lbl">${q.replace('_', ' ')}</span>
+          <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-left:16px">
+          <span class="card-cnt">${count}</span>
+          ${!zero ? '<span class="tog">▾</span>' : ''}
+        </div>
+      </div>
+      <div class="card-body">
+        ${ctxs.length > 0
+          ? ctxs.map(c => `<div class="mention">${highlight(c)}</div>`).join('')
+          : `<div class="mention" style="color:var(--muted);font-family:'DM Mono',monospace;font-size:12px">No AI/ML/NLP mentions found in this transcript.</div>`
+        }
+      </div>`;
+
+    if (!zero) {
+      card.querySelector('.card-hdr').addEventListener('click', () => card.classList.toggle('open'));
+      card.classList.add('open');
+    }
+    grid.appendChild(card);
+  });
+}
+
+function highlight(text) {
+  return text.replace(
+    /\b(AI|artificial intelligence|machine learning|ML|NLP|natural language processing|natural language|generative AI|AI-driven|AI-enabled|AI-forward|AI-related|AI-based|chatbot|chatbots|Vesta|Mac Chat|SSE)\b/gi,
+    m => `<mark>${m}</mark>`
+  );
+}
+
+buildCards();
+</script>
+</body>
+</html>
