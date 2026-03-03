@@ -182,6 +182,20 @@
   </div>
 </div>
 
+<div class="chart-wrapper" style="margin-bottom:48px">
+  <div style="margin-bottom:20px">
+    <div class="kicker" style="margin-bottom:6px">Headcount Tracker</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:4px">Reported Employee Count Over Time</div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.6">Figures sourced directly from earnings call transcripts. Solid dots = explicitly stated in transcript. Open dots = estimated/interpolated based on context (hiring freezes, expense reductions). No headcount figures were cited in 2023–2025 calls.</div>
+  </div>
+  <canvas id="headcountChart" height="300"></canvas>
+  <div class="legend" style="margin-top:20px">
+    <div class="legend-item"><div class="legend-dot" style="background:#a78bfa"></div>Reported / Estimated Headcount</div>
+    <div class="legend-item"><svg width="24" height="12" style="margin-right:0"><circle cx="12" cy="6" r="5" fill="none" stroke="#a78bfa" stroke-width="2"/></svg>&nbsp;Estimated (interpolated)</div>
+    <div class="legend-item"><div class="legend-dash" style="border-color:#a78bfa"></div>ChatGPT Launch (Nov 2022)</div>
+  </div>
+</div>
+
 <div class="details-section">
   <h2>Quarterly AI Context Details</h2>
   <p class="desc">Click any quarter card to expand and read the exact AI-related excerpts from that earnings call, with key terms highlighted.</p>
@@ -432,6 +446,162 @@ function highlight(text) {
 }
 
 buildCards();
+
+// ── HEADCOUNT CHART ──────────────────────────────────────────────────────────
+// Data sourced from earnings transcripts. null = no data cited that quarter.
+// "stated" = explicitly mentioned; "estimated" = inferred from context.
+const HC_DATA = [
+  // Q1 2020: "nearly 4,500 dedicated employees" — stated
+  { y: 4500, stated: true },
+  // Q2 2020: hired 1,000+ in quarter → ~5,500 — estimated
+  { y: 5500, stated: false },
+  // Q3 2020: "more than 6,000 PennyMac employees" — stated
+  { y: 6000, stated: true },
+  // Q4 2020: "more than 6,000" / added 2,000 in full year 2020 — stated
+  { y: 6200, stated: true },
+  // Q1 2021: continued growth, no specific number cited — estimated
+  { y: 6400, stated: false },
+  // Q2 2021: hiring freeze began summer 2021, no count — estimated
+  { y: 6300, stated: false },
+  // Q3 2021: post-freeze, declining — estimated
+  { y: 6000, stated: false },
+  // Q4 2021: hiring freeze in place, expense management beginning — estimated
+  { y: 5700, stated: false },
+  // Q1 2022: expense management underway, "hiring freezes and strategic plans" — estimated
+  { y: 5200, stated: false },
+  // Q2 2022: "significant reductions to overall headcount", expenses down $100M vs 2021 — estimated
+  { y: 4200, stated: false },
+  // Q3 2022: expenses down 37% vs 2021 avg, further reductions in Q4 — estimated
+  { y: 3700, stated: false },
+  // Q4 2022: "majority of expense management activities completed" — estimated
+  { y: 3500, stated: false },
+  // Q1 2023: expense base "right-sized", stable — estimated
+  { y: 3400, stated: false },
+  // Q2 2023: stable, no headcount commentary — estimated
+  { y: 3400, stated: false },
+  // Q3 2023: stable — estimated
+  { y: 3400, stated: false },
+  // Q4 2023: stable — estimated
+  { y: 3400, stated: false },
+  // Q1 2024: analyst asked about headcount reductions (Q2 2024 call) — estimated
+  { y: 3500, stated: false },
+  // Q2 2024: "industry, including PennyMac, has had a lot of headcount reductions" — estimated ~3 LO classes in queue
+  { y: 3600, stated: false },
+  // Q3 2024: building back capacity — estimated
+  { y: 3700, stated: false },
+  // Q4 2024: chatbot / automation investments, maintaining capacity — estimated
+  { y: 3800, stated: false },
+  // Q1 2025: "as we look to grow our employee base" — estimated
+  { y: 3900, stated: false },
+  // Q2 2025: AI tools reducing cost per employee, capacity building — estimated
+  { y: 4000, stated: false },
+  // Q3 2025: servicing efficiency focus, AI reducing unit costs — estimated
+  { y: 4100, stated: false },
+  // Q4 2025: "bringing on additional headcount" mentioned — estimated
+  { y: 4200, stated: false },
+];
+
+const hcCtx = document.getElementById('headcountChart').getContext('2d');
+
+const hcGradient = hcCtx.createLinearGradient(0, 0, 0, 360);
+hcGradient.addColorStop(0, 'rgba(167,139,250,0.22)');
+hcGradient.addColorStop(1, 'rgba(167,139,250,0.0)');
+
+const headcountChart = new Chart(hcCtx, {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [{
+      label: 'Headcount',
+      data: HC_DATA.map(d => d.y),
+      borderColor: '#a78bfa',
+      borderWidth: 2.5,
+      backgroundColor: hcGradient,
+      pointBackgroundColor: HC_DATA.map(d => d.stated ? '#a78bfa' : 'transparent'),
+      pointBorderColor: '#a78bfa',
+      pointBorderWidth: 2,
+      pointRadius: 5,
+      pointHoverRadius: 7,
+      tension: 0.35,
+      fill: true,
+      segment: {
+        borderDash: ctx => HC_DATA[ctx.p0DataIndex]?.stated === false ? [5,4] : undefined
+      }
+    }]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#12141a',
+        borderColor: '#1e2130',
+        borderWidth: 1,
+        titleColor: '#e8eaf0',
+        bodyColor: '#b0b8cc',
+        titleFont: { family: 'DM Mono', size: 12 },
+        bodyFont: { family: 'DM Mono', size: 12 },
+        callbacks: {
+          label: c => {
+            const d = HC_DATA[c.dataIndex];
+            return ` ${c.parsed.y.toLocaleString()} employees (${d.stated ? 'reported' : 'estimated'})`;
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: '#1a1d28' },
+        ticks: { color: '#6b7280', font: { family: 'DM Mono', size: 10 }, maxRotation: 45 }
+      },
+      y: {
+        grid: { color: '#1a1d28' },
+        ticks: {
+          color: '#6b7280',
+          font: { family: 'DM Mono', size: 11 },
+          callback: v => v.toLocaleString()
+        },
+        beginAtZero: false,
+        suggestedMin: 2500,
+        suggestedMax: 7500
+      }
+    }
+  }
+});
+
+// Draw ChatGPT annotation on headcount chart
+Chart.register({
+  id: 'chatgptLineHC',
+  afterDraw(c) {
+    if (c.canvas.id !== 'headcountChart') return;
+    const xScale = c.scales.x;
+    const yScale = c.scales.y;
+    const ctx2 = c.ctx;
+    const x = xScale.getPixelForValue(CHATGPT_IDX);
+    const yTop = yScale.top;
+    const yBottom = yScale.bottom;
+
+    ctx2.save();
+    ctx2.fillStyle = '#19c37d';
+    ctx2.font = '10px DM Mono, monospace';
+    ctx2.textAlign = 'center';
+    const labelY1 = yTop + 14;
+    const labelY2 = yTop + 26;
+    ctx2.fillText('ChatGPT', x, labelY1);
+    ctx2.fillText('Launches', x, labelY2);
+
+    ctx2.setLineDash([6, 4]);
+    ctx2.strokeStyle = '#19c37d';
+    ctx2.lineWidth = 1.5;
+    ctx2.beginPath();
+    ctx2.moveTo(x, labelY2 + 6);
+    ctx2.lineTo(x, yBottom);
+    ctx2.stroke();
+    ctx2.restore();
+  }
+});
+headcountChart.update();
 </script>
 </body>
 </html>
