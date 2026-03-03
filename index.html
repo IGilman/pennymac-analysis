@@ -560,7 +560,8 @@ const headcountChart = new Chart(hcCtx, {
         ticks: {
           color: '#6b7280',
           font: { family: 'DM Mono', size: 11 },
-          callback: v => v.toLocaleString()
+          callback: v => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v,
+          maxTicksLimit: 6
         },
         beginAtZero: false,
         suggestedMin: 2500,
